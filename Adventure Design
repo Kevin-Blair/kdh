@@ -1,0 +1,103 @@
+#define BLYNK_PRINT Serial
+#include <OneWire.h>
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+ #include <avr/power.h>
+#endif
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#define PIN D6
+int NUMPIXELS = 60;
+char auth[] = "토큰";
+char ssid[] = "와이파이주소";
+char pass[] = "비밀번호";
+float t;
+#define DS18S20_Pin D1
+OneWire ds(DS18S20_Pin);
+Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRBW + NEO_KHZ800);
+#define DELAYVAL 500
+
+void setup()
+{
+  Serial.begin(9600);
+#if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
+  clock_prescale_set(clock_div_1);
+#endif
+  pixels.begin();
+  Blynk.begin(auth, ssid, pass);
+
+}
+void loop()
+{
+  Blynk.run();
+  t = getTemp();
+  if (t >= 26){
+      Blynk.notify("수온이 높습니다.");
+  }
+  
+  float temperature = getTemp();
+  Serial.println(temperature);
+  if(temperature < 26){
+    for(int i=0; i<NUMPIXELS; i++) {
+    pixels.setPixelColor(i, pixels.Color(0, 150, 200, 0)); 
+  }
+  pixels.show();
+  delay(DELAYVAL);
+  }
+  else{
+    for(int i=0; i<NUMPIXELS; i++) {
+    pixels.setPixelColor(i, pixels.Color(200, 0, 0, 0)); 
+  }
+  pixels.show();
+  delay(DELAYVAL);
+  }
+}
+BLYNK_READ(V0)
+{
+  Blynk.virtualWrite(V0, t);
+}
+
+float getTemp(){
+
+ byte data[12];
+ byte addr[8];
+
+ if ( !ds.search(addr)) {
+   ds.reset_search();
+   return -1000;
+ }
+
+ if ( OneWire::crc8( addr, 7) != addr[7]) {
+   Serial.println("CRC is not valid!");
+   return -1000;
+ }
+
+ if ( addr[0] != 0x10 && addr[0] != 0x28) {
+   Serial.print("Device is not recognized");
+   return -1000;
+ }
+
+ ds.reset();
+ ds.select(addr);
+ ds.write(0x44,1);    //변환
+
+ byte present = ds.reset();
+ ds.select(addr);  
+ ds.write(0xBE); 
+
+ 
+ for (int i = 0; i < 9; i++) { 
+  data[i] = ds.read();
+ }
+ 
+ ds.reset_search();
+ 
+ byte MSB = data[1];
+ byte LSB = data[0];
+
+ float tempRead = ((MSB << 8) | LSB); 
+ float TemperatureSum = tempRead / 16;
+ 
+ return TemperatureSum;
+ 
+}
